@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 from .. import db
 from ..models import User
 
@@ -6,12 +7,14 @@ users_bp = Blueprint("users", __name__)
 
 
 @users_bp.route("/", methods=["GET"])
+@jwt_required()
 def get_users():
     users = User.query.order_by(User.created_at.desc()).all()
     return jsonify([u.to_dict() for u in users]), 200
 
 
 @users_bp.route("/", methods=["POST"])
+@jwt_required()
 def create_user():
     data = request.get_json()
 
@@ -33,6 +36,7 @@ def create_user():
 
 
 @users_bp.route("/<int:user_id>", methods=["GET"])
+@jwt_required()
 def get_user(user_id):
     user = User.query.get_or_404(user_id)
     return jsonify(user.to_dict()), 200

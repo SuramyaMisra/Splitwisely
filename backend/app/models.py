@@ -7,12 +7,29 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)  # nullable for existing users
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    group_memberships = db.relationship("GroupMember", back_populates="user", lazy="dynamic")
-    expenses_paid = db.relationship("Expense", back_populates="paid_by_user", lazy="dynamic")
-    expense_splits = db.relationship("ExpenseSplit", back_populates="user", lazy="dynamic")
+    group_memberships = db.relationship("GroupMember", back_populates="user", lazy=True)
+    expense_splits = db.relationship("ExpenseSplit", back_populates="user", lazy=True)
+    expenses_paid = db.relationship("Expense", back_populates="paid_by_user", lazy=True)
+
+    def set_password(self, password):
+        import bcrypt
+        self.password_hash = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+    def check_password(self, password):
+        import bcrypt
+        if not self.password_hash:
+            return False
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            self.password_hash.encode("utf-8")
+        )
 
     def to_dict(self):
         return {
@@ -21,7 +38,6 @@ class User(db.Model):
             "email": self.email,
             "created_at": self.created_at.isoformat(),
         }
-
 
 class Group(db.Model):
     __tablename__ = "groups"

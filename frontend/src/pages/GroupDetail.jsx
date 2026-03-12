@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getGroup, getExpenses, getBalances, addExpense,
-  addMember, settleDebt, getGroupSummary, getUsers } from "../services/api";
+  addMember, removeMember, settleDebt, getGroupSummary, getUsers } from "../services/api";
 
 export default function GroupDetail({ groupId, onBack }) {
   const [group, setGroup] = useState(null);
@@ -42,10 +42,17 @@ export default function GroupDetail({ groupId, onBack }) {
   const handleAddExpense = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...expenseForm, amount: parseFloat(expenseForm.amount), paid_by: parseInt(expenseForm.paid_by) };
+      const payload = {
+        ...expenseForm,
+        amount: parseFloat(expenseForm.amount),
+        paid_by: parseInt(expenseForm.paid_by)
+      };
       const newExpense = await addExpense(groupId, payload);
       setExpenses([newExpense, ...expenses]);
-      setExpenseForm({ description: "", amount: "", paid_by: "", date: new Date().toISOString().split("T")[0] });
+      setExpenseForm({
+        description: "", amount: "", paid_by: "",
+        date: new Date().toISOString().split("T")[0]
+      });
       setShowExpenseForm(false);
       const balancesData = await getBalances(groupId);
       setBalances(balancesData.balances);
@@ -61,10 +68,21 @@ export default function GroupDetail({ groupId, onBack }) {
     } catch (err) { setError(err.message); }
   };
 
+  const handleRemoveMember = async (userId, userName) => {
+    if (!window.confirm(`Remove ${userName} from this group?`)) return;
+    try {
+      await removeMember(groupId, userId);
+      const groupData = await getGroup(groupId);
+      setGroup(groupData);
+    } catch (err) { setError(err.message); }
+  };
+
   const handleSettle = async (fromUserId, toUserId) => {
     try {
       await settleDebt(groupId, { from_user_id: fromUserId, to_user_id: toUserId });
-      const [balancesData, expensesData] = await Promise.all([getBalances(groupId), getExpenses(groupId)]);
+      const [balancesData, expensesData] = await Promise.all([
+        getBalances(groupId), getExpenses(groupId)
+      ]);
       setBalances(balancesData.balances);
       setTransactions(balancesData.suggested_transactions);
       setExpenses(expensesData);
@@ -91,7 +109,12 @@ export default function GroupDetail({ groupId, onBack }) {
 
   return (
     <div className="page">
-      {error && <div className="error-banner">{error}<button onClick={() => setError(null)}>×</button></div>}
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       <div className="page-header">
         <div className="header-left">
@@ -122,9 +145,21 @@ export default function GroupDetail({ groupId, onBack }) {
           <div key={m.user_id} className="member-badge">
             <span className="member-avatar">{m.user_name.charAt(0)}</span>
             <span>{m.user_name}</span>
+            <button
+              className="member-remove-btn"
+              onClick={() => handleRemoveMember(m.user_id, m.user_name)}
+              title="Remove member"
+            >
+              ×
+            </button>
           </div>
         ))}
-        <button className="member-add-btn" onClick={() => setShowMemberForm(!showMemberForm)}>+ Add</button>
+        <button
+          className="member-add-btn"
+          onClick={() => setShowMemberForm(!showMemberForm)}
+        >
+          + Add
+        </button>
       </div>
 
       {showMemberForm && nonMembers.length > 0 && (
@@ -132,8 +167,11 @@ export default function GroupDetail({ groupId, onBack }) {
           <h3>Add Member</h3>
           <div className="user-picker">
             {nonMembers.map((u) => (
-              <button key={u.id} className="btn btn-secondary"
-                onClick={() => { handleAddMember(u.id); setShowMemberForm(false); }}>
+              <button
+                key={u.id}
+                className="btn btn-secondary"
+                onClick={() => { handleAddMember(u.id); setShowMemberForm(false); }}
+              >
                 {u.name}
               </button>
             ))}
@@ -149,8 +187,11 @@ export default function GroupDetail({ groupId, onBack }) {
 
       <div className="tabs">
         {["expenses", "balances", "ai"].map((tab) => (
-          <button key={tab} className={`tab ${activeTab === tab ? "tab-active" : ""}`}
-            onClick={() => setActiveTab(tab)}>
+          <button
+            key={tab}
+            className={`tab ${activeTab === tab ? "tab-active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+          >
             {tab === "ai" ? "✦ AI Summary" : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
@@ -160,35 +201,74 @@ export default function GroupDetail({ groupId, onBack }) {
         <div>
           <div className="section-header">
             <h2>Expenses</h2>
-            <button className="btn btn-primary" onClick={() => setShowExpenseForm(!showExpenseForm)}>+ Add Expense</button>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowExpenseForm(!showExpenseForm)}
+            >
+              + Add Expense
+            </button>
           </div>
+
           {showExpenseForm && (
             <div className="card form-card">
               <h3>Add New Expense</h3>
               <form onSubmit={handleAddExpense} className="form">
-                <input className="input" placeholder="What was this for? (e.g. Dinner)" value={expenseForm.description}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} required />
+                <input
+                  className="input"
+                  placeholder="What was this for? (e.g. Dinner)"
+                  value={expenseForm.description}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                  required
+                />
                 <div className="form-row">
-                  <input className="input" type="number" step="0.01" min="0.01" placeholder="Amount (₹)"
-                    value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} required />
-                  <input className="input" type="date" value={expenseForm.date}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} required />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="Amount (₹)"
+                    value={expenseForm.amount}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                    required
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={expenseForm.date}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+                    required
+                  />
                 </div>
-                <select className="input" value={expenseForm.paid_by}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, paid_by: e.target.value })} required>
+                <select
+                  className="input"
+                  value={expenseForm.paid_by}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, paid_by: e.target.value })}
+                  required
+                >
                   <option value="">Who paid?</option>
                   {group.members?.map((m) => (
                     <option key={m.user_id} value={m.user_id}>{m.user_name}</option>
                   ))}
                 </select>
-                <p className="form-hint">Split equally among all {group.members?.length} members</p>
+                <p className="form-hint">
+                  Split equally among all {group.members?.length} members
+                </p>
                 <div className="form-actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => setShowExpenseForm(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Add Expense</button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setShowExpenseForm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Add Expense
+                  </button>
                 </div>
               </form>
             </div>
           )}
+
           {expenses.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">💸</div>
@@ -199,15 +279,21 @@ export default function GroupDetail({ groupId, onBack }) {
               {expenses.map((exp) => (
                 <div key={exp.id} className="card expense-item">
                   <div className="expense-left">
-                    <div className="expense-icon">{exp.description.charAt(0).toUpperCase()}</div>
+                    <div className="expense-icon">
+                      {exp.description.charAt(0).toUpperCase()}
+                    </div>
                     <div>
                       <h4>{exp.description}</h4>
-                      <p className="expense-meta">Paid by <strong>{exp.paid_by_name}</strong> · {exp.date}</p>
+                      <p className="expense-meta">
+                        Paid by <strong>{exp.paid_by_name}</strong> · {exp.date}
+                      </p>
                     </div>
                   </div>
                   <div className="expense-right">
                     <span className="expense-amount">₹{exp.amount.toFixed(2)}</span>
-                    <span className="expense-per">₹{(exp.amount / (exp.splits?.length || 1)).toFixed(2)}/person</span>
+                    <span className="expense-per">
+                      ₹{(exp.amount / (exp.splits?.length || 1)).toFixed(2)}/person
+                    </span>
                   </div>
                 </div>
               ))}
@@ -232,10 +318,13 @@ export default function GroupDetail({ groupId, onBack }) {
               </div>
             ))}
           </div>
+
           {transactions.length > 0 && (
             <div className="section">
               <h2>Settle Up — Minimum Transactions</h2>
-              <p className="section-desc">The fewest transactions needed to clear all debts.</p>
+              <p className="section-desc">
+                The fewest transactions needed to clear all debts.
+              </p>
               <div className="transaction-list">
                 {transactions.map((t, i) => (
                   <div key={i} className="card transaction-item">
@@ -245,7 +334,10 @@ export default function GroupDetail({ groupId, onBack }) {
                       <span className="tx-to">{t.to_user_name}</span>
                       <span className="tx-amount">₹{t.amount.toFixed(2)}</span>
                     </div>
-                    <button className="btn btn-success" onClick={() => handleSettle(t.from_user_id, t.to_user_id)}>
+                    <button
+                      className="btn btn-success"
+                      onClick={() => handleSettle(t.from_user_id, t.to_user_id)}
+                    >
                       Mark Settled
                     </button>
                   </div>
@@ -253,6 +345,7 @@ export default function GroupDetail({ groupId, onBack }) {
               </div>
             </div>
           )}
+
           {transactions.length === 0 && balances.length > 0 && (
             <div className="empty-state">
               <div className="empty-icon">✓</div>
@@ -268,7 +361,11 @@ export default function GroupDetail({ groupId, onBack }) {
           <div className="ai-header">
             <h2>✦ AI Group Summary</h2>
             <p>Let AI analyze your group's spending and give you actionable insights.</p>
-            <button className="btn btn-primary" onClick={handleAiSummary} disabled={aiLoading}>
+            <button
+              className="btn btn-primary"
+              onClick={handleAiSummary}
+              disabled={aiLoading}
+            >
               {aiLoading ? "Generating..." : "Generate Summary"}
             </button>
           </div>

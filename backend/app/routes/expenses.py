@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 from .. import db
 from ..models import Group, GroupMember, Expense, ExpenseSplit, User
 
@@ -8,6 +9,7 @@ expenses_bp = Blueprint("expenses", __name__)
 
 
 @expenses_bp.route("/groups/<int:group_id>/expenses", methods=["GET"])
+@jwt_required()
 def get_expenses(group_id):
     Group.query.get_or_404(group_id)
     expenses = (
@@ -19,6 +21,7 @@ def get_expenses(group_id):
 
 
 @expenses_bp.route("/groups/<int:group_id>/expenses", methods=["POST"])
+@jwt_required()
 def add_expense(group_id):
     Group.query.get_or_404(group_id)
     data = request.get_json()
@@ -79,10 +82,13 @@ def add_expense(group_id):
 
 
 @expenses_bp.route("/groups/<int:group_id>/balances", methods=["GET"])
+@jwt_required()
 def get_balances(group_id):
     from ..services.splitting import calculate_net_balances, simplify_debts
     Group.query.get_or_404(group_id)
-    balances = calculate_net_balances(group_id, db, Expense, ExpenseSplit, GroupMember, User)
+    balances = calculate_net_balances(
+        group_id, db, Expense, ExpenseSplit, GroupMember, User
+    )
     transactions = simplify_debts(balances)
     return jsonify({
         "balances": balances,
@@ -91,6 +97,7 @@ def get_balances(group_id):
 
 
 @expenses_bp.route("/groups/<int:group_id>/settle", methods=["POST"])
+@jwt_required()
 def settle_debt(group_id):
     Group.query.get_or_404(group_id)
     data = request.get_json()
@@ -115,3 +122,47 @@ def settle_debt(group_id):
         "message": f"Successfully settled {settled_count} split(s)",
         "settled_count": settled_count,
     }), 200
+
+
+@expenses_bp.route("/groups/<int:group_id>/parse-expense", methods=["POST"])
+@jwt_required()
+def parse_expense(group_id):
+    """
+    Takes natural language text and returns structured expense data.
+    Example input:  { "text": "Rahul paid 500 for dinner last night" }
+    Example output: { "description": "dinner", "amount": 500,
+                      "paid_by_name": "Rahul", "date": "2026-03-10" }
+    """
+    from ..services.ai_service import parse_expense_text
+
+    Group.query.get_or_404(group_id)
+    data = request.get_json()
+
+    if not data or not data.get("text"):
+        return jsonify({"error": "text is required"}), 400
+
+    # Get member names so AI can match the payer correctly
+    members = GroupMember.query.filter_by(group_id=group_id).all()
+    member_names = [m.user.name for m in members]
+
+    result = parse_expense_text(data["text"], member_names)
+
+    if not result:
+        return jsonify({"error": "Could not parse expense from that text. Try being more specific, e.g. 'Rahul paid 500 for dinner'"}), 422
+
+    return jsonify(result), 200
+
+@expenses_bp.route("/groups/<int:group_id>/expenses/<int:expense_id>", methods=["DELETE"])
+@jwt_required()
+def delete_expense(group_id, expense_id):
+    Group.query.get_or_404(group_id)
+    expense = Expense.query.filter_by(
+        id=expense_id, group_id=group_id
+    ).first_or_404()
+
+    # Delete splits first, then expense
+    ExpenseSplit.query.filter_by(expense_id=expense_id).delete()
+    db.session.delete(expense)
+    db.session.commit()
+
+    return jsonify({"message": "Expense deleted"}), 200
