@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 import requests
 from datetime import datetime, timedelta
 
@@ -257,7 +258,6 @@ def _rule_based_parse(text, member_names):
         "date":         date,
     }
     
-import base64
 
 def scan_bill_image(image_base64, image_type="image/jpeg"):
     """
@@ -320,7 +320,7 @@ Rules:
             return None
 
         parsed = json.loads(result[start:end])
-        return {
+        return {    
             "description": parsed.get("description", "Expense"),
             "amount": float(parsed.get("amount", 0)) if parsed.get("amount") else None,
             "date": parsed.get("date") or today.isoformat(),
