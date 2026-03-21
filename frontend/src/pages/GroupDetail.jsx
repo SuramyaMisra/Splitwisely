@@ -1,24 +1,32 @@
 import { useState, useEffect } from "react";
-import { getGroup, getExpenses, getBalances, addExpense,
-  addMember, removeMember, settleDebt, getGroupSummary, getUsers } from "../services/api";
+import {
+  getGroup, getExpenses, getBalances, addExpense,
+  addMember, removeMember, settleDebt, getGroupSummary,
+  getUsers, parseExpense, deleteExpense,
+} from "../services/api";
 
 export default function GroupDetail({ groupId, onBack }) {
-  const [group, setGroup] = useState(null);
-  const [expenses, setExpenses] = useState([]);
-  const [balances, setBalances] = useState([]);
+  const [group, setGroup]               = useState(null);
+  const [expenses, setExpenses]         = useState([]);
+  const [balances, setBalances]         = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [aiSummary, setAiSummary] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("expenses");
+  const [allUsers, setAllUsers]         = useState([]);
+  const [aiSummary, setAiSummary]       = useState("");
+  const [aiLoading, setAiLoading]       = useState(false);
+  const [activeTab, setActiveTab]       = useState("expenses");
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [showMemberForm, setShowMemberForm] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({
+  const [showMemberForm, setShowMemberForm]   = useState(false);
+  const [expenseForm, setExpenseForm]   = useState({
     description: "", amount: "", paid_by: "",
     date: new Date().toISOString().split("T")[0],
   });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [nlText, setNlText]       = useState("");
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlError, setNlError]     = useState(null);
+  const [nlSuccess, setNlSuccess] = useState(false);
+  const [loading, setLoading]   = useState(true);
+  const [settling, setSettling] = useState(false);
+  const [error, setError]       = useState(null);
 
   useEffect(() => { loadAll(); }, [groupId]);
 
@@ -44,20 +52,51 @@ export default function GroupDetail({ groupId, onBack }) {
     try {
       const payload = {
         ...expenseForm,
-        amount: parseFloat(expenseForm.amount),
-        paid_by: parseInt(expenseForm.paid_by)
+        amount:  parseFloat(expenseForm.amount),
+        paid_by: parseInt(expenseForm.paid_by),
       };
       const newExpense = await addExpense(groupId, payload);
       setExpenses([newExpense, ...expenses]);
       setExpenseForm({
         description: "", amount: "", paid_by: "",
-        date: new Date().toISOString().split("T")[0]
+        date: new Date().toISOString().split("T")[0],
       });
       setShowExpenseForm(false);
+      setNlText("");
+      setNlSuccess(false);
       const balancesData = await getBalances(groupId);
       setBalances(balancesData.balances);
       setTransactions(balancesData.suggested_transactions);
     } catch (err) { setError(err.message); }
+  };
+
+  const handleParseExpense = async () => {
+    if (!nlText.trim()) return;
+    setNlLoading(true);
+    setNlError(null);
+    setNlSuccess(false);
+    try {
+      const parsed = await parseExpense(groupId, nlText);
+      let paid_by_id = "";
+      if (parsed.paid_by_name) {
+        const match = group.members?.find(
+          (m) => m.user_name.toLowerCase() === parsed.paid_by_name.toLowerCase()
+        );
+        if (match) paid_by_id = String(match.user_id);
+      }
+      setExpenseForm({
+        description: parsed.description || "",
+        amount:      parsed.amount ? String(parsed.amount) : "",
+        paid_by:     paid_by_id,
+        date:        parsed.date || new Date().toISOString().split("T")[0],
+      });
+      setShowExpenseForm(true);
+      setNlSuccess(true);
+    } catch (err) {
+      setNlError(err.message);
+    } finally {
+      setNlLoading(false);
+    }
   };
 
   const handleAddMember = async (userId) => {
@@ -77,16 +116,28 @@ export default function GroupDetail({ groupId, onBack }) {
     } catch (err) { setError(err.message); }
   };
 
-  const handleSettle = async (fromUserId, toUserId) => {
+  const handleDeleteExpense = async (expenseId) => {
+    if (!window.confirm("Delete this expense? This cannot be undone.")) return;
     try {
-      await settleDebt(groupId, { from_user_id: fromUserId, to_user_id: toUserId });
-      const [balancesData, expensesData] = await Promise.all([
-        getBalances(groupId), getExpenses(groupId)
-      ]);
+      await deleteExpense(groupId, expenseId);
+      setExpenses(expenses.filter(e => e.id !== expenseId));
+      const balancesData = await getBalances(groupId);
       setBalances(balancesData.balances);
       setTransactions(balancesData.suggested_transactions);
-      setExpenses(expensesData);
     } catch (err) { setError(err.message); }
+  };
+
+  const handleSettle = async (fromUserId, toUserId) => {
+    if (settling) return;
+    setSettling(true);
+    try {
+      await settleDebt(groupId, { from_user_id: fromUserId, to_user_id: toUserId });
+      await loadAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSettling(false);
+    }
   };
 
   const handleAiSummary = async () => {
@@ -96,16 +147,16 @@ export default function GroupDetail({ groupId, onBack }) {
       const data = await getGroupSummary(groupId);
       setAiSummary(data.summary);
     } catch (err) {
-      setAiSummary("Could not generate summary. Check your OpenAI API key.");
+      setAiSummary("Could not generate summary. Please try again.");
     } finally { setAiLoading(false); }
   };
 
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const memberIds = group?.members?.map((m) => m.user_id) || [];
-  const nonMembers = allUsers.filter((u) => !memberIds.includes(u.id));
+  const memberIds     = group?.members?.map((m) => m.user_id) || [];
+  const nonMembers    = allUsers.filter((u) => !memberIds.includes(u.id));
 
   if (loading) return <div className="loading">Loading group...</div>;
-  if (!group) return null;
+  if (!group)  return null;
 
   return (
     <div className="page">
@@ -145,19 +196,12 @@ export default function GroupDetail({ groupId, onBack }) {
           <div key={m.user_id} className="member-badge">
             <span className="member-avatar">{m.user_name.charAt(0)}</span>
             <span>{m.user_name}</span>
-            <button
-              className="member-remove-btn"
+            <button className="member-remove-btn"
               onClick={() => handleRemoveMember(m.user_id, m.user_name)}
-              title="Remove member"
-            >
-              ×
-            </button>
+              title="Remove member">×</button>
           </div>
         ))}
-        <button
-          className="member-add-btn"
-          onClick={() => setShowMemberForm(!showMemberForm)}
-        >
+        <button className="member-add-btn" onClick={() => setShowMemberForm(!showMemberForm)}>
           + Add
         </button>
       </div>
@@ -167,11 +211,8 @@ export default function GroupDetail({ groupId, onBack }) {
           <h3>Add Member</h3>
           <div className="user-picker">
             {nonMembers.map((u) => (
-              <button
-                key={u.id}
-                className="btn btn-secondary"
-                onClick={() => { handleAddMember(u.id); setShowMemberForm(false); }}
-              >
+              <button key={u.id} className="btn btn-secondary"
+                onClick={() => { handleAddMember(u.id); setShowMemberForm(false); }}>
                 {u.name}
               </button>
             ))}
@@ -181,17 +222,15 @@ export default function GroupDetail({ groupId, onBack }) {
 
       {showMemberForm && nonMembers.length === 0 && (
         <div className="card form-card">
-          <p>All registered users are already in this group. Add more people from the home page.</p>
+          <p>All registered users are already in this group.</p>
         </div>
       )}
 
       <div className="tabs">
         {["expenses", "balances", "ai"].map((tab) => (
-          <button
-            key={tab}
+          <button key={tab}
             className={`tab ${activeTab === tab ? "tab-active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-          >
+            onClick={() => setActiveTab(tab)}>
             {tab === "ai" ? "✦ AI Summary" : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
@@ -201,69 +240,68 @@ export default function GroupDetail({ groupId, onBack }) {
         <div>
           <div className="section-header">
             <h2>Expenses</h2>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowExpenseForm(!showExpenseForm)}
-            >
+            <button className="btn btn-primary"
+              onClick={() => { setShowExpenseForm(!showExpenseForm); setNlSuccess(false); }}>
               + Add Expense
             </button>
           </div>
 
           {showExpenseForm && (
             <div className="card form-card">
-              <h3>Add New Expense</h3>
+              <div className="nl-section">
+                <h3>✦ Add with AI</h3>
+                <p className="nl-hint">
+                  Type naturally — e.g. <em>"Rahul paid 500 for dinner last night"</em>
+                </p>
+                <div className="nl-input-row">
+                  <input className="input"
+                    placeholder="Describe the expense in plain English..."
+                    value={nlText}
+                    onChange={(e) => { setNlText(e.target.value); setNlSuccess(false); setNlError(null); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleParseExpense()}
+                  />
+                  <button className="btn btn-primary"
+                    onClick={handleParseExpense}
+                    disabled={nlLoading || !nlText.trim()}>
+                    {nlLoading ? "Parsing..." : "Parse ✦"}
+                  </button>
+                </div>
+                {nlError   && <p className="nl-error">⚠ {nlError}</p>}
+                {nlSuccess && <p className="nl-success">✓ Form filled — review and confirm below</p>}
+              </div>
+
+              <div className="nl-divider"><span>or fill manually</span></div>
+
+              <h3>Expense Details</h3>
               <form onSubmit={handleAddExpense} className="form">
-                <input
-                  className="input"
-                  placeholder="What was this for? (e.g. Dinner)"
+                <input className="input" placeholder="What was this for? (e.g. Dinner)"
                   value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                  required
-                />
+                  required />
                 <div className="form-row">
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="Amount (₹)"
-                    value={expenseForm.amount}
+                  <input className="input" type="number" step="0.01" min="0.01"
+                    placeholder="Amount (₹)" value={expenseForm.amount}
                     onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                    required
-                  />
-                  <input
-                    className="input"
-                    type="date"
-                    value={expenseForm.date}
+                    required />
+                  <input className="input" type="date" value={expenseForm.date}
                     onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
-                    required
-                  />
+                    required />
                 </div>
-                <select
-                  className="input"
-                  value={expenseForm.paid_by}
+                <select className="input" value={expenseForm.paid_by}
                   onChange={(e) => setExpenseForm({ ...expenseForm, paid_by: e.target.value })}
-                  required
-                >
+                  required>
                   <option value="">Who paid?</option>
                   {group.members?.map((m) => (
                     <option key={m.user_id} value={m.user_id}>{m.user_name}</option>
                   ))}
                 </select>
-                <p className="form-hint">
-                  Split equally among all {group.members?.length} members
-                </p>
+                <p className="form-hint">Split equally among all {group.members?.length} members</p>
                 <div className="form-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setShowExpenseForm(false)}
-                  >
+                  <button type="button" className="btn btn-ghost"
+                    onClick={() => { setShowExpenseForm(false); setNlText(""); setNlSuccess(false); }}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Expense
-                  </button>
+                  <button type="submit" className="btn btn-primary">Add Expense</button>
                 </div>
               </form>
             </div>
@@ -279,9 +317,7 @@ export default function GroupDetail({ groupId, onBack }) {
               {expenses.map((exp) => (
                 <div key={exp.id} className="card expense-item">
                   <div className="expense-left">
-                    <div className="expense-icon">
-                      {exp.description.charAt(0).toUpperCase()}
-                    </div>
+                    <div className="expense-icon">{exp.description.charAt(0).toUpperCase()}</div>
                     <div>
                       <h4>{exp.description}</h4>
                       <p className="expense-meta">
@@ -294,6 +330,9 @@ export default function GroupDetail({ groupId, onBack }) {
                     <span className="expense-per">
                       ₹{(exp.amount / (exp.splits?.length || 1)).toFixed(2)}/person
                     </span>
+                    <button className="group-action-btn delete-btn"
+                      onClick={() => handleDeleteExpense(exp.id)}
+                      title="Delete expense">🗑</button>
                   </div>
                 </div>
               ))}
@@ -322,9 +361,8 @@ export default function GroupDetail({ groupId, onBack }) {
           {transactions.length > 0 && (
             <div className="section">
               <h2>Settle Up — Minimum Transactions</h2>
-              <p className="section-desc">
-                The fewest transactions needed to clear all debts.
-              </p>
+              <p className="section-desc">The fewest transactions needed to clear all debts.</p>
+              {settling && <div className="settling-banner">⏳ Processing settlement — please wait...</div>}
               <div className="transaction-list">
                 {transactions.map((t, i) => (
                   <div key={i} className="card transaction-item">
@@ -334,11 +372,10 @@ export default function GroupDetail({ groupId, onBack }) {
                       <span className="tx-to">{t.to_user_name}</span>
                       <span className="tx-amount">₹{t.amount.toFixed(2)}</span>
                     </div>
-                    <button
-                      className="btn btn-success"
+                    <button className="btn btn-success"
                       onClick={() => handleSettle(t.from_user_id, t.to_user_id)}
-                    >
-                      Mark Settled
+                      disabled={settling}>
+                      {settling ? "Wait..." : "Mark Settled"}
                     </button>
                   </div>
                 ))}
@@ -361,11 +398,7 @@ export default function GroupDetail({ groupId, onBack }) {
           <div className="ai-header">
             <h2>✦ AI Group Summary</h2>
             <p>Let AI analyze your group's spending and give you actionable insights.</p>
-            <button
-              className="btn btn-primary"
-              onClick={handleAiSummary}
-              disabled={aiLoading}
-            >
+            <button className="btn btn-primary" onClick={handleAiSummary} disabled={aiLoading}>
               {aiLoading ? "Generating..." : "Generate Summary"}
             </button>
           </div>
