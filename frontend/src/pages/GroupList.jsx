@@ -1,23 +1,26 @@
 import { useState, useEffect } from "react";
-import { getGroups, createGroup, getUsers, createUser } from "../services/api";
+import { getGroups, createGroup, getUsers, createUser,
+         updateGroup, deleteGroup } from "../services/api";
 
 export default function GroupList({ onSelectGroup }) {
-  const [groups, setGroups] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [groups, setGroups]               = useState([]);
+  const [users, setUsers]                 = useState([]);
   const [showGroupForm, setShowGroupForm] = useState(false);
-  const [showUserForm, setShowUserForm] = useState(false);
-  const [groupForm, setGroupForm] = useState({ name: "", description: "" });
-  const [userForm, setUserForm] = useState({ name: "", email: "" });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [showUserForm, setShowUserForm]   = useState(false);
+  const [groupForm, setGroupForm]         = useState({ name: "", description: "" });
+  const [userForm, setUserForm]           = useState({ name: "", email: "" });
+  const [editingGroup, setEditingGroup]   = useState(null);
+  const [editForm, setEditForm]           = useState({ name: "", description: "" });
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const [groupsData, usersData] = await Promise.all([getGroups(), getUsers()]);
+      const [groupsData, usersData] = await Promise.all([
+        getGroups(), getUsers()
+      ]);
       setGroups(groupsData);
       setUsers(usersData);
     } catch (err) {
@@ -34,9 +37,7 @@ export default function GroupList({ onSelectGroup }) {
       setGroups([newGroup, ...groups]);
       setGroupForm({ name: "", description: "" });
       setShowGroupForm(false);
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
 
   const handleCreateUser = async (e) => {
@@ -46,9 +47,32 @@ export default function GroupList({ onSelectGroup }) {
       setUsers([newUser, ...users]);
       setUserForm({ name: "", email: "" });
       setShowUserForm(false);
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleEditGroup = (e, group) => {
+    // Stop click from opening group detail
+    e.stopPropagation();
+    setEditingGroup(group.id);
+    setEditForm({ name: group.name, description: group.description || "" });
+  };
+
+  const handleUpdateGroup = async (e, groupId) => {
+    e.preventDefault();
+    try {
+      const updated = await updateGroup(groupId, editForm);
+      setGroups(groups.map(g => g.id === groupId ? { ...g, ...updated } : g));
+      setEditingGroup(null);
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleDeleteGroup = async (e, groupId, groupName) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${groupName}"? This will delete all expenses and cannot be undone.`)) return;
+    try {
+      await deleteGroup(groupId);
+      setGroups(groups.filter(g => g.id !== groupId));
+    } catch (err) { setError(err.message); }
   };
 
   if (loading) return <div className="loading">Loading...</div>;
@@ -70,10 +94,12 @@ export default function GroupList({ onSelectGroup }) {
           </p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => setShowUserForm(!showUserForm)}>
+          <button className="btn btn-secondary"
+            onClick={() => setShowUserForm(!showUserForm)}>
             + Add Person
           </button>
-          <button className="btn btn-primary" onClick={() => setShowGroupForm(!showGroupForm)}>
+          <button className="btn btn-primary"
+            onClick={() => setShowGroupForm(!showGroupForm)}>
             + New Group
           </button>
         </div>
@@ -84,13 +110,18 @@ export default function GroupList({ onSelectGroup }) {
           <h3>Add a New Person</h3>
           <form onSubmit={handleCreateUser} className="form">
             <div className="form-row">
-              <input className="input" placeholder="Full name" value={userForm.name}
-                onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} required />
-              <input className="input" type="email" placeholder="Email address" value={userForm.email}
-                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
+              <input className="input" placeholder="Full name"
+                value={userForm.name}
+                onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                required />
+              <input className="input" type="email" placeholder="Email address"
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                required />
             </div>
             <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowUserForm(false)}>Cancel</button>
+              <button type="button" className="btn btn-ghost"
+                onClick={() => setShowUserForm(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Add Person</button>
             </div>
           </form>
@@ -101,12 +132,16 @@ export default function GroupList({ onSelectGroup }) {
         <div className="card form-card">
           <h3>Create a New Group</h3>
           <form onSubmit={handleCreateGroup} className="form">
-            <input className="input" placeholder="Group name (e.g. Goa Trip 2024)" value={groupForm.name}
-              onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} required />
-            <input className="input" placeholder="Description (optional)" value={groupForm.description}
+            <input className="input" placeholder="Group name (e.g. Goa Trip 2024)"
+              value={groupForm.name}
+              onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+              required />
+            <input className="input" placeholder="Description (optional)"
+              value={groupForm.description}
               onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })} />
             <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowGroupForm(false)}>Cancel</button>
+              <button type="button" className="btn btn-ghost"
+                onClick={() => setShowGroupForm(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Create Group</button>
             </div>
           </form>
@@ -121,20 +156,64 @@ export default function GroupList({ onSelectGroup }) {
         </div>
       ) : (
         <div className="card-grid">
-          {groups.map((group) => (
-            <button key={group.id} className="card group-card" onClick={() => onSelectGroup(group.id)}>
-              <div className="group-card-icon">{group.name.charAt(0).toUpperCase()}</div>
-              <div className="group-card-info">
-                <h3>{group.name}</h3>
-                {group.description && <p className="group-desc">{group.description}</p>}
-                <div className="group-card-meta">
-                  <span>{group.member_count} member{group.member_count !== 1 ? "s" : ""}</span>
-                  <span>·</span>
-                  <span>{group.expense_count} expense{group.expense_count !== 1 ? "s" : ""}</span>
+          {groups.map((group, index) => (
+            <div key={group.id}>
+              {editingGroup === group.id ? (
+                // ── Edit Form ──
+                <div className="card form-card">
+                  <h3>Edit Group</h3>
+                  <form onSubmit={(e) => handleUpdateGroup(e, group.id)} className="form">
+                    <input className="input" placeholder="Group name"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      required />
+                    <input className="input" placeholder="Description (optional)"
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+                    <div className="form-actions">
+                      <button type="button" className="btn btn-ghost"
+                        onClick={() => setEditingGroup(null)}>Cancel</button>
+                      <button type="submit" className="btn btn-primary">Save Changes</button>
+                    </div>
+                  </form>
                 </div>
-              </div>
-              <span className="group-card-arrow">→</span>
-            </button>
+              ) : (
+                // ── Group Card ──
+                <button
+                  className="card group-card"
+                  onClick={() => onSelectGroup(group.id)}
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <div className="group-card-icon">
+                    {group.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="group-card-info">
+                    <h3>{group.name}</h3>
+                    {group.description && (
+                      <p className="group-desc">{group.description}</p>
+                    )}
+                    <div className="group-card-meta">
+                      <span>{group.member_count} member{group.member_count !== 1 ? "s" : ""}</span>
+                      <span>·</span>
+                      <span>{group.expense_count} expense{group.expense_count !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="group-card-actions">
+                    <button
+                      className="group-action-btn edit-btn"
+                      onClick={(e) => handleEditGroup(e, group)}
+                      title="Edit group"
+                    >✎</button>
+                    <button
+                      className="group-action-btn delete-btn"
+                      onClick={(e) => handleDeleteGroup(e, group.id, group.name)}
+                      title="Delete group"
+                    >🗑</button>
+                    <span className="group-card-arrow">→</span>
+                  </div>
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

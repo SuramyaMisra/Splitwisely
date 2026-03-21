@@ -35,18 +35,24 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <button className="logo" onClick={() => navigateTo("groups")}>
-          <span className="logo-icon">⚖</span>
-          <span className="logo-text">SplitWise<em>ly</em></span>
-        </button>
-        <p className="header-tagline">Smart expense splitting for groups</p>
-        <div className="header-user">
-          <span className="header-username">👤 {currentUser.name}</span>
-          <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
-            Sign out
-          </button>
-        </div>
-      </header>
+  <button className="logo" onClick={() => navigateTo("groups")}>
+    <span className="logo-icon">⬡</span>
+    <span className="logo-text">Split<em>Wisely</em></span>
+  </button>
+  <p className="header-tagline">
+    <span className="tagline-1">Smart</span>
+    <span className="tagline-divider">·</span>
+    <span className="tagline-2">Simple</span>
+    <span className="tagline-divider">·</span>
+    <span className="tagline-3">Fair</span>
+  </p>
+  <div className="header-user">
+    <span className="header-username">👤 {currentUser.name}</span>
+    <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
+      Sign out
+    </button>
+  </div>
+</header>
 
       <main className="app-main">
         {currentPage === "groups" && (
