@@ -256,3 +256,77 @@ def _rule_based_parse(text, member_names):
         "paid_by_name": paid_by_name,
         "date":         date,
     }
+    
+import base64
+
+def scan_bill_image(image_base64, image_type="image/jpeg"):
+    """
+    Send bill image to Groq Vision and extract expense details.
+    image_base64: base64 encoded image string
+    image_type: mime type like image/jpeg or image/png
+    """
+    today = datetime.utcnow().date()
+
+    try:
+        response = requests.post(
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.2-11b-vision-preview",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{image_type};base64,{image_base64}"
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": f"""Look at this bill/receipt image and extract the expense details.
+Respond with ONLY a JSON object, no explanation, no markdown:
+{{"description": "what the bill is for in 1-3 words", "amount": total_amount_as_number, "date": "{today.isoformat()}"}}
+
+Rules:
+- amount must be the TOTAL amount as a number only, no currency symbols
+- description should be short like "Dinner", "Groceries", "Petrol"
+- if you cannot read the bill clearly, use null for that field"""
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 150,
+                "temperature": 0.1,
+            },
+            timeout=30,
+        )
+
+        data = response.json()
+        if "choices" not in data:
+            print("GROQ VISION ERROR:", data)
+            return None
+
+        result = data["choices"][0]["message"]["content"].strip()
+
+        # Clean and parse JSON
+        start = result.find("{")
+        end = result.rfind("}") + 1
+        if start == -1 or end == 0:
+            return None
+
+        parsed = json.loads(result[start:end])
+        return {
+            "description": parsed.get("description", "Expense"),
+            "amount": float(parsed.get("amount", 0)) if parsed.get("amount") else None,
+            "date": parsed.get("date") or today.isoformat(),
+            "paid_by_name": None,
+        }
+
+    except Exception as e:
+        print("GROQ VISION EXCEPTION:", str(e))
+        return None

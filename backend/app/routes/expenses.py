@@ -166,3 +166,22 @@ def delete_expense(group_id, expense_id):
     db.session.commit()
 
     return jsonify({"message": "Expense deleted"}), 200
+@expenses_bp.route("/groups/<int:group_id>/scan-bill", methods=["POST"])
+@jwt_required()
+def scan_bill(group_id):
+    Group.query.get_or_404(group_id)
+    data = request.get_json()
+
+    if not data or "image" not in data:
+        return jsonify({"error": "No image provided"}), 400
+
+    image_base64 = data["image"]
+    image_type   = data.get("type", "image/jpeg")
+
+    from app.services.ai_service import scan_bill_image
+    result = scan_bill_image(image_base64, image_type)
+
+    if not result:
+        return jsonify({"error": "Could not read bill. Try a clearer photo."}), 422
+
+    return jsonify(result), 200

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   getGroup, getExpenses, getBalances, addExpense,
   addMember, removeMember, settleDebt, getGroupSummary,
-  getUsers, parseExpense, deleteExpense,
+  getUsers, parseExpense, deleteExpense, scanBill,
 } from "../services/api";
 
 export default function GroupDetail({ groupId, onBack }) {
@@ -20,13 +20,15 @@ export default function GroupDetail({ groupId, onBack }) {
     description: "", amount: "", paid_by: "",
     date: new Date().toISOString().split("T")[0],
   });
-  const [nlText, setNlText]       = useState("");
-  const [nlLoading, setNlLoading] = useState(false);
-  const [nlError, setNlError]     = useState(null);
-  const [nlSuccess, setNlSuccess] = useState(false);
-  const [loading, setLoading]   = useState(true);
-  const [settling, setSettling] = useState(false);
-  const [error, setError]       = useState(null);
+  const [nlText, setNlText]           = useState("");
+  const [nlLoading, setNlLoading]     = useState(false);
+  const [nlError, setNlError]         = useState(null);
+  const [nlSuccess, setNlSuccess]     = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError]     = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [settling, setSettling]       = useState(false);
+  const [error, setError]             = useState(null);
 
   useEffect(() => { loadAll(); }, [groupId]);
 
@@ -96,6 +98,42 @@ export default function GroupDetail({ groupId, onBack }) {
       setNlError(err.message);
     } finally {
       setNlLoading(false);
+    }
+  };
+
+  const handleScanBill = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setScanLoading(true);
+    setScanError(null);
+    setNlSuccess(false);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const parsed = await scanBill(groupId, base64, file.type);
+      let paid_by_id = "";
+      if (parsed.paid_by_name) {
+        const match = group.members?.find(
+          (m) => m.user_name.toLowerCase() === parsed.paid_by_name.toLowerCase()
+        );
+        if (match) paid_by_id = String(match.user_id);
+      }
+      setExpenseForm({
+        description: parsed.description || "",
+        amount:      parsed.amount ? String(parsed.amount) : "",
+        paid_by:     paid_by_id,
+        date:        parsed.date || new Date().toISOString().split("T")[0],
+      });
+      setShowExpenseForm(true);
+      setNlSuccess(true);
+    } catch (err) {
+      setScanError(err.message);
+    } finally {
+      setScanLoading(false);
     }
   };
 
@@ -268,6 +306,29 @@ export default function GroupDetail({ groupId, onBack }) {
                 </div>
                 {nlError   && <p className="nl-error">⚠ {nlError}</p>}
                 {nlSuccess && <p className="nl-success">✓ Form filled — review and confirm below</p>}
+
+                <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <label style={{
+                    display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                    padding: "0.5rem 1rem",
+                    background: "var(--teal-pale)",
+                    border: "1px solid rgba(13,148,136,0.3)",
+                    borderRadius: "var(--radius-xs)",
+                    color: "var(--teal)", fontSize: "0.82rem", fontWeight: "600",
+                    cursor: scanLoading ? "not-allowed" : "pointer",
+                    opacity: scanLoading ? 0.6 : 1, transition: "all 0.2s",
+                  }}>
+                    {scanLoading ? "📷 Scanning..." : "📷 Scan Bill"}
+                    <input type="file" accept="image/*" capture="environment"
+                      style={{ display: "none" }}
+                      onChange={handleScanBill}
+                      disabled={scanLoading} />
+                  </label>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                    Upload a photo of your bill
+                  </span>
+                </div>
+                {scanError && <p className="nl-error">⚠ {scanError}</p>}
               </div>
 
               <div className="nl-divider"><span>or fill manually</span></div>

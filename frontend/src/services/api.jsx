@@ -51,3 +51,5 @@ export const getGroupSummary = (groupId) => request("GET", `/groups/${groupId}/s
 export const updateGroup   = (groupId, payload)     => request("PUT",    `/groups/${groupId}`,                    payload);
 export const deleteGroup   = (groupId)               => request("DELETE", `/groups/${groupId}`);
 export const deleteExpense = (groupId, expenseId)    => request("DELETE", `/groups/${groupId}/expenses/${expenseId}`);
+
+export const scanBill = (groupId, image, type) => request("POST", `/groups/${groupId}/scan-bill`, { image, type });
