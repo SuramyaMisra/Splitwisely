@@ -275,7 +275,7 @@ def scan_bill_image(image_base64, image_type="image/jpeg"):
                 "Content-Type": "application/json",
             },
             json={
-                "model": "llama-3.2-11b-vision-preview",
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
                 "messages": [
                     {
                         "role": "user",
