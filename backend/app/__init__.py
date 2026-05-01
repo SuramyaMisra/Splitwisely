@@ -20,8 +20,7 @@ def create_app():
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+    CORS(app)
     from . import models
 
     from .routes.users import users_bp
