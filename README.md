@@ -9,7 +9,7 @@ Built for real-world trips, flat expenses, outings, and shared spending scenario
 # 🚀 Live Deployment
 
 ## Frontend
-https://splitwisely-5b82y2jz-suramyamisras-projects.vercel.app
+[[[https://splitwisely-5b82y2jz-suramyamisras-projects.vercel.app](https://splitwisely-two.vercel.app/)](https://splitwisely-two.vercel.app/)](https://splitwisely-two.vercel.app/)
 
 ## Backend API
 https://splitwisely-backend.onrender.com
