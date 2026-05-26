@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown'
 import { useState, useEffect } from "react";
 import {
   getGroup, getExpenses, getBalances, addExpense,
@@ -472,8 +473,9 @@ export default function GroupDetail({ groupId, onBack }) {
           {aiSummary && !aiLoading && (
             <div className="card ai-result">
               <div className="ai-badge">✦ AI Generated</div>
-              <p className="ai-text">{aiSummary}</p>
+              <ReactMarkdown className="ai-text">{aiSummary}</ReactMarkdown>
             </div>
+
           )}
         </div>
       )}

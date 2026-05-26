@@ -14,7 +14,8 @@ def create_app():
     app = Flask(__name__)
 
     from .config import config
-    app.config.from_object(config["development"])
+    env = os.environ.get("FLASK_ENV", "development")
+    app.config.from_object(config[env])
 
     db.init_app(app)
     migrate.init_app(app, db)
