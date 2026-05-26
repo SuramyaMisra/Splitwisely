@@ -1,30 +1,131 @@
-# SplitWisely — Smart Group Expense Splitter
+# SplitWisely ✨
 
-A full-stack web application for splitting shared expenses among groups, with AI-powered spending summaries and a debt simplification algorithm that minimizes the number of transactions needed to settle up.
+A full-stack web application for splitting shared expenses among groups, with AI-powered expense parsing, OCR-based receipt scanning, smart balance calculation, and a debt simplification algorithm that minimizes the number of transactions needed to settle up.
 
----
-
-## The Problem It Solves
-
-When groups of people share expenses (trips, flatmates, events), tracking who owes whom becomes messy fast. Naively settling 10 expenses among 5 people could require 20+ transactions. SplitWisely calculates the minimum transactions needed using a greedy debt simplification algorithm.
+Built for real-world trips, flat expenses, outings, and shared spending scenarios where financial correctness matters.
 
 ---
 
-## Tech Stack
+# 🚀 Live Deployment
 
-| Layer | Technology | Why |
-|---|---|---|
-| Frontend | React + Vite | Fast dev experience, component model maps well to groups/expenses/balances |
-| Backend | Python + Flask | Lightweight, explicit — no magic, easy to reason about |
-| Database | PostgreSQL | ACID compliance important for financial data; relational model fits domain perfectly |
-| ORM | SQLAlchemy + Flask-Migrate | Migration-based schema management; prevents manual SQL errors |
-| AI | OpenRouter API | Access to free LLM models for summarization |
-| Styling | Vanilla CSS + CSS Variables | No framework overhead; full control over design |
+## Frontend
+https://splitwisely-5b82y2jz-suramyamisras-projects.vercel.app
+
+## Backend API
+https://splitwisely-backend.onrender.com
 
 ---
 
-## Architecture
+# The Problem It Solves
+
+When groups of people share expenses — trips, rent, fuel, food, events — tracking who owes whom becomes messy very fast.
+
+Most basic expense splitters fail in two major ways:
+
+- they create too many unnecessary settlement transactions
+- they recalculate old expenses incorrectly when new members join later
+
+Example:
+
+- 6 friends go on a trip
+- expenses are added
+- later a 7th member joins
+- older expenses suddenly split among 7 people
+
+That is financially wrong.
+
+SplitWisely solves this using:
+- participant snapshot preservation
+- smart debt simplification
+- accurate historical balance tracking
+
+---
+
+# ✨ Core Features
+
+## 🔐 Authentication System
+- JWT-based authentication
+- Secure login/register flow
+- Protected API routes
+- Password hashing using bcrypt
+
+---
+
+## 👥 Group Management
+- Create groups
+- Add/remove members
+- Group-wise expense tracking
+- Dynamic member handling
+
+---
+
+## 💸 Expense System
+- Add expenses manually
+- Delete expenses
+- Equal expense splitting
+- Historical participant preservation
+- Settlement tracking
+
+---
+
+## 🤖 AI Expense Parsing
+
+Users can enter expenses naturally:
+
+```text
+"Rohan paid 500 for dinner yesterday"
 ```
+
+The AI automatically extracts:
+- payer
+- amount
+- description
+- date
+
+This reduces manual form filling significantly.
+
+---
+
+## 📷 OCR + AI Receipt Scanning
+
+Users can upload bill images directly.
+
+The system:
+1. extracts bill information
+2. sends structured context to the AI model
+3. auto-generates expense data
+
+This creates a near one-click expense entry workflow.
+
+---
+
+## 🧠 Smart Debt Simplification
+
+Naive settlement systems create too many transactions.
+
+SplitWisely uses a greedy debt simplification algorithm that minimizes transfers.
+
+Instead of:
+
+```text
+A pays B
+B pays C
+C pays D
+```
+
+the algorithm simplifies to:
+
+```text
+A directly pays D
+```
+
+This significantly reduces settlement complexity in large groups.
+
+---
+
+# 🏗 Architecture
+
+```text
 ┌──────────────────────────────────────────┐
 │         React Frontend (Vite)            │
 │  GroupList → GroupDetail → Tabs          │
@@ -41,17 +142,47 @@ When groups of people share expenses (trips, flatmates, events), tracking who ow
              │
     ┌────────┴────────┐
     ▼                 ▼
-PostgreSQL DB     OpenRouter API
+PostgreSQL DB     Groq/OpenRouter API
 ```
 
-**Key architectural decision:** All business logic lives in `app/services/`, not in routes. Routes are thin — they validate input, call services, return JSON. This makes the core logic independently testable.
+### Key Architectural Decision
+
+All business logic lives inside:
+
+```text
+backend/app/services/
+```
+
+Routes remain thin:
+- validate input
+- call services
+- return JSON
+
+This keeps:
+- code modular
+- logic testable
+- architecture maintainable
 
 ---
 
-## Database Schema
+# 🛠 Tech Stack
 
-Five tables with clear relationships:
-```
+| Layer | Technology | Why |
+|---|---|---|
+| Frontend | React + Vite | Fast development and clean component architecture |
+| Backend | Flask + Python | Lightweight, explicit, easy to reason about |
+| Database | PostgreSQL | ACID compliance important for financial data |
+| ORM | SQLAlchemy + Flask-Migrate | Migration-based schema management |
+| AI | Groq + OpenRouter API | Fast and cost-effective LLM access |
+| OCR | AI-assisted parsing | Smart receipt extraction |
+| Styling | Vanilla CSS + CSS Variables | Full UI control without framework overhead |
+| Deployment | Vercel + Render | Simple production deployment |
+
+---
+
+# 🗄 Database Schema
+
+```text
 users ──< group_members >── groups
                                │
                            expenses
@@ -59,135 +190,269 @@ users ──< group_members >── groups
                         expense_splits
 ```
 
-**Why `expense_splits` is a separate table:** An expense can be split among a subset of group members. Embedding splits in the expense row would require denormalization — wrong for financial data that needs to be queried and updated independently.
+---
 
-**Why `Decimal` not `Float`:** Floating-point arithmetic is imprecise for money. `0.1 + 0.2 != 0.3` in floating point. All monetary values use Python's `Decimal` type and are stored as `NUMERIC(10, 2)` in PostgreSQL.
+# Why `expense_splits` Exists Separately
+
+An expense may involve:
+- all members
+- only selected members
+
+Using a separate `expense_splits` table allows:
+- normalized financial records
+- participant snapshot preservation
+- independent settlement tracking
+
+This becomes critical for financial correctness.
 
 ---
 
-## The Debt Simplification Algorithm
+# Why Decimal Instead of Float
 
-**File:** `backend/app/services/splitting.py`
+Money should NEVER use floating-point arithmetic.
 
-**Problem:** With n people and m expenses, a naive approach produces O(n*m) transactions. The algorithm reduces this to at most n-1 transactions.
+Example:
 
-**Approach:** Greedy matching
-1. Calculate each person's net balance (total paid minus total owed)
-2. Separate into creditors (net positive) and debtors (net negative)
-3. Greedily match the largest debtor to the largest creditor
-4. Settlement amount is `min(debt, credit)`
-5. Reduce both balances and repeat until settled
-
-**Complexity:** O(n log n) for sorting, O(n) for settlement passes.
-
----
-
-## AI Integration
-
-**Endpoint:** `GET /api/groups/<id>/summary`
-
-Sends structured group data to an LLM via OpenRouter API. Returns natural language summary with spending overview, who contributed most, settlement instructions, and practical tips.
-
----
-
-## Project Structure
+```python
+0.1 + 0.2 != 0.3
 ```
+
+SplitWisely uses:
+- Python `Decimal`
+- PostgreSQL `NUMERIC(10,2)`
+
+to maintain precise financial calculations.
+
+---
+
+# 🧠 Debt Simplification Algorithm
+
+File:
+
+```text
+backend/app/services/splitting.py
+```
+
+### Approach
+
+1. Calculate each user's net balance
+2. Separate creditors and debtors
+3. Greedily match largest debtor to largest creditor
+4. Minimize total number of transfers
+
+### Complexity
+
+```text
+O(n log n)
+```
+
+due to sorting.
+
+---
+
+# 🧪 Testing
+
+Backend tests added using Pytest for:
+- debt simplification logic
+- participant snapshot logic
+- authentication validation
+
+Run tests:
+
+```bash
+cd backend
+python -m pytest
+```
+
+---
+
+# 📂 Project Structure
+
+```bash
 expense-splitter/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py          # Flask app factory
-│   │   ├── models.py            # All DB models
-│   │   ├── config.py            # Environment config
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── config.py
 │   │   ├── routes/
 │   │   │   ├── users.py
 │   │   │   ├── groups.py
 │   │   │   ├── expenses.py
+│   │   │   ├── auth.py
 │   │   │   └── ai.py
+│   │   │
 │   │   └── services/
-│   │       ├── splitting.py     # Debt algorithm
-│   │       └── ai_service.py    # AI integration
+│   │       ├── splitting.py
+│   │       └── ai_service.py
+│   │
+│   ├── tests/
 │   ├── requirements.txt
 │   └── run.py
+│
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── GroupList.jsx
-│   │   │   └── GroupDetail.jsx
 │   │   ├── services/
-│   │   │   └── api.js
 │   │   ├── App.jsx
 │   │   └── index.css
+│   │
 │   └── package.json
-├── claude.md
+│
 └── README.md
 ```
 
 ---
 
-## Setup & Running
+# ⚙️ Setup & Running
 
-### Prerequisites
+# Prerequisites
+
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL running locally
+- PostgreSQL
 
-### Backend
+---
+
+# Backend Setup
+
 ```bash
 cd backend
-python -m venv venv
-venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your DATABASE_URL and OPENAI_API_KEY (OpenRouter key)
 
-flask --app run db upgrade
-python run.py
-# API running at http://localhost:5000
+python -m venv venv
 ```
 
-### Frontend
+Activate environment:
+
+## Windows
+
 ```bash
-cd frontend
-npm install
-npm run dev
-# App running at http://localhost:5173
+venv\Scripts\activate
+```
+
+## Mac/Linux
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ---
 
-## API Reference
+# Configure Environment Variables
+
+Create `.env` inside backend:
+
+```env
+DATABASE_URL=your_database_url
+JWT_SECRET_KEY=your_secret_key
+OPENROUTER_API_KEY=your_api_key
+FLASK_ENV=development
+```
+
+---
+
+# Run Database Migrations
+
+```bash
+flask db upgrade
+```
+
+---
+
+# Start Backend
+
+```bash
+python run.py
+```
+
+Backend runs on:
+
+```text
+http://localhost:5000
+```
+
+---
+
+# Frontend Setup
+
+```bash
+cd frontend
+
+npm install
+npm run dev
+```
+
+Frontend runs on:
+
+```text
+http://localhost:5173
+```
+
+---
+
+# 📡 API Reference
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/health | Health check |
-| GET | /api/users/ | List all users |
-| POST | /api/users/ | Create user |
-| GET | /api/groups/ | List all groups |
-| POST | /api/groups/ | Create group |
-| GET | /api/groups/:id | Get group details |
+|---|---|---|
+| POST | /api/auth/register | Register user |
+| POST | /api/auth/login | Login |
+| GET | /api/auth/me | Current user |
+| GET | /api/groups | List groups |
+| POST | /api/groups | Create group |
+| GET | /api/groups/:id | Group details |
 | POST | /api/groups/:id/members | Add member |
 | GET | /api/groups/:id/expenses | List expenses |
 | POST | /api/groups/:id/expenses | Add expense |
-| GET | /api/groups/:id/balances | Get balances + settlements |
-| POST | /api/groups/:id/settle | Mark debt as settled |
-| GET | /api/groups/:id/summary | AI summary |
+| GET | /api/groups/:id/balances | Get balances |
+| POST | /api/groups/:id/settle | Settle debt |
+| POST | /api/groups/:id/parse-expense | AI parsing |
+| POST | /api/groups/:id/scan-bill | Receipt scanning |
 
 ---
 
-## Known Risks & Trade-offs
+# ⚠️ Known Trade-offs
 
-1. **No authentication** — deliberate scope decision for this assessment
-2. **Equal splits only** — schema supports unequal splits, not yet exposed in UI
-3. **Free AI models** — OpenRouter free tier has rate limits; app works fully without AI
-4. **Currency** — hardcoded to INR; multi-currency would need exchange rate service
+- Equal splitting only
+- No realtime websocket sync
+- OCR quality depends on image clarity
+- Free AI models may have rate limits
+- Currency currently fixed to INR
 
 ---
 
-## Extension Approach
+# 🔮 Future Improvements
 
-1. JWT authentication and user sessions
-2. Custom splits by percentage or exact amount
-3. Receipt scanning with OCR
-4. Push notifications for settlement reminders
-5. Multi-currency support
-6. CSV/PDF export
+- Dark mode
+- Custom percentage splits
+- PDF settlement export
+- Multi-currency support
+- Realtime sync
+- Spending analytics dashboard
+- Mobile responsiveness improvements
+
+---
+
+# 📸 Screenshots
+
+_Add screenshots here._
+
+---
+
+# 👨‍💻 Author
+
+## Suramya Misra
+
+GitHub:
+https://github.com/SuramyaMisra
+
+---
+
+# 📄 License
+
+This project is built for educational, learning, and portfolio purposes.
