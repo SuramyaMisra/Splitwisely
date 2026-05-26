@@ -14,6 +14,7 @@ def create_app():
     app = Flask(__name__)
 
     from .config import config
+
     env = os.environ.get("FLASK_ENV", "development")
     app.config.from_object(config[env])
 
@@ -21,7 +22,14 @@ def create_app():
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    CORS(app)
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "*"}},
+        supports_credentials=True,
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"]
+    )
+
     from . import models
 
     from .routes.users import users_bp

@@ -6,7 +6,7 @@ from .. import db
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/register", methods=["POST"])
+@auth_bp.route("/register", methods=["POST", "OPTIONS"])
 def register():
     """
     Register a new user.
@@ -32,13 +32,12 @@ def register():
         name=data["name"].strip(),
         email=data["email"].lower().strip(),
     )
-    user.set_password(data["password"])  # hashes the password
+
+    user.set_password(data["password"])
 
     db.session.add(user)
     db.session.commit()
 
-    # Create JWT token immediately after register
-    # str(user.id) becomes the "identity" stored in the token
     token = create_access_token(identity=str(user.id))
 
     return jsonify({
@@ -48,7 +47,7 @@ def register():
     }), 201
 
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/login", methods=["POST", "OPTIONS"])
 def login():
     """
     Login with email and password.
@@ -60,14 +59,11 @@ def login():
     if not data or not data.get("email") or not data.get("password"):
         return jsonify({"error": "Email and password are required"}), 400
 
-    # Find user by email
     user = User.query.filter_by(email=data["email"].lower().strip()).first()
 
-    # Check user exists and password is correct
     if not user or not user.check_password(data["password"]):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    # Create JWT token
     token = create_access_token(identity=str(user.id))
 
     return jsonify({
@@ -84,7 +80,7 @@ def get_current_user():
     Get the currently logged in user.
     Requires valid JWT token in Authorization header.
     """
-    # get_jwt_identity() extracts user_id from the token
     user_id = get_jwt_identity()
     user = User.query.get_or_404(int(user_id))
+
     return jsonify(user.to_dict()), 200
