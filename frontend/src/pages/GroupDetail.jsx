@@ -51,27 +51,44 @@ export default function GroupDetail({ groupId, onBack }) {
   };
 
   const handleAddExpense = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        ...expenseForm,
-        amount:  parseFloat(expenseForm.amount),
-        paid_by: parseInt(expenseForm.paid_by),
-      };
-      const newExpense = await addExpense(groupId, payload);
-      setExpenses([newExpense, ...expenses]);
-      setExpenseForm({
-        description: "", amount: "", paid_by: "",
-        date: new Date().toISOString().split("T")[0],
-      });
-      setShowExpenseForm(false);
-      setNlText("");
-      setNlSuccess(false);
-      const balancesData = await getBalances(groupId);
-      setBalances(balancesData.balances);
-      setTransactions(balancesData.suggested_transactions);
-    } catch (err) { setError(err.message); }
-  };
+  e.preventDefault();
+
+  try {
+    const payload = {
+      ...expenseForm,
+
+      amount: parseFloat(expenseForm.amount),
+      paid_by: parseInt(expenseForm.paid_by),
+
+      // snapshot current group members
+      participant_ids: group.members.map((m) => m.user_id),
+    };
+
+    const newExpense = await addExpense(groupId, payload);
+
+    setExpenses([newExpense, ...expenses]);
+
+    setExpenseForm({
+      description: "",
+      amount: "",
+      paid_by: "",
+      date: new Date().toISOString().split("T")[0],
+    });
+
+    setShowExpenseForm(false);
+
+    setNlText("");
+    setNlSuccess(false);
+
+    const balancesData = await getBalances(groupId);
+
+    setBalances(balancesData.balances);
+    setTransactions(balancesData.suggested_transactions);
+
+  } catch (err) {
+    setError(err.message);
+  }
+};
 
   const handleParseExpense = async () => {
     if (!nlText.trim()) return;
@@ -357,7 +374,7 @@ export default function GroupDetail({ groupId, onBack }) {
                     <option key={m.user_id} value={m.user_id}>{m.user_name}</option>
                   ))}
                 </select>
-                <p className="form-hint">Split equally among all {group.members?.length} members</p>
+                <p className="form-hint">Expense participants are saved at creation time. New members added later will not affect old expenses.</p>
                 <div className="form-actions">
                   <button type="button" className="btn btn-ghost"
                     onClick={() => { setShowExpenseForm(false); setNlText(""); setNlSuccess(false); }}>
@@ -391,6 +408,7 @@ export default function GroupDetail({ groupId, onBack }) {
                     <span className="expense-amount">₹{exp.amount.toFixed(2)}</span>
                     <span className="expense-per">
                       ₹{(exp.amount / (exp.splits?.length || 1)).toFixed(2)}/person
+                      • {exp.splits?.length || 1} participants
                     </span>
                     <button className="group-action-btn delete-btn"
                       onClick={() => handleDeleteExpense(exp.id)}
